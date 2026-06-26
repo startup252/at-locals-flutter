@@ -1,3 +1,3 @@
-// Change this to your Railway URL for production
-// e.g. "https://your-app.railway.app"
-const String kBaseUrl = "https://stayease-booking-production.up.railway.app";
+// DEV: local Next.js server
+// PROD: change back to "https://stayease-booking-production.up.railway.app"
+const String kBaseUrl = "http://localhost:3000";
