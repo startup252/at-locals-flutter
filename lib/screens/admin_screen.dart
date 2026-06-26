@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../services/auth_provider.dart';
 import '../services/api_service.dart';
+import '../config.dart';
 
 // ─── Brand palette: Blue · White · Black ───────────────────────────────────
 const _kBlue   = Color(0xFF2563EB);
@@ -515,7 +516,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 child: SizedBox(
                   width: 60, height: 60,
                   child: imgUrl != null
-                      ? Image.network(imgUrl, fit: BoxFit.cover,
+                      ? Image.network(_fullUrl(imgUrl), fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => _imgBox())
                       : _imgBox(),
                 ),
@@ -646,6 +647,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     color: _kBg,
     child: const Icon(Icons.home_work_outlined, color: _kBorder, size: 26),
   );
+
+  String _fullUrl(String url) =>
+      url.startsWith('http') ? url : '$kBaseUrl$url';
 }
 
 class _Sec extends StatelessWidget {

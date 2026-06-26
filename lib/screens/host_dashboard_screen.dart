@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../services/auth_provider.dart';
 import '../services/api_service.dart';
 import '../models/property.dart';
+import '../config.dart';
 
 const _kBlue   = Color(0xFF2563EB);
 const _kBlueL  = Color(0xFFEFF6FF);
@@ -194,7 +195,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
           child: SizedBox(
             width: 44, height: 44,
             child: img != null
-                ? Image.network(img, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgBox())
+                ? Image.network(_fullUrl(img), fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgBox())
                 : _imgBox(),
           ),
         ),
@@ -256,7 +257,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
                 child: SizedBox(
                   width: 90, height: 90,
                   child: img != null
-                      ? Image.network(img, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgBox())
+                      ? Image.network(_fullUrl(img), fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgBox())
                       : _imgBox(),
                 ),
               ),
@@ -437,6 +438,9 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
   }
 
   Widget _imgBox() => Container(color: _kBg, child: const Icon(Icons.home_work_outlined, color: _kBorder, size: 26));
+
+  String _fullUrl(String url) =>
+      url.startsWith('http') ? url : '$kBaseUrl$url';
 
   String _fmtDate(String iso) {
     try { return DateFormat('MMM d, yyyy').format(DateTime.parse(iso)); } catch (_) { return iso; }
