@@ -4,6 +4,13 @@ import 'package:intl/intl.dart';
 import '../services/auth_provider.dart';
 import '../services/api_service.dart';
 
+const _kBlue   = Color(0xFF2563EB);
+const _kBlueL  = Color(0xFFEFF6FF);
+const _kBlack  = Color(0xFF111827);
+const _kGrey   = Color(0xFF6B7280);
+const _kBorder = Color(0xFFE5E7EB);
+const _kBg     = Color(0xFFF9FAFB);
+
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
   @override
@@ -16,7 +23,8 @@ class _StaffScreenState extends State<StaffScreen> with SingleTickerProviderStat
   String? _error;
 
   Map<String, dynamic>? _stats;
-  List<dynamic> _pendingUsers = [];
+  List<dynamic> _pending  = [];
+  List<dynamic> _allUsers = [];
 
   @override
   void initState() {
@@ -26,271 +34,288 @@ class _StaffScreenState extends State<StaffScreen> with SingleTickerProviderStat
   }
 
   @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
-  }
+  void dispose() { _tab.dispose(); super.dispose(); }
 
   Future<void> _load() async {
-    final userId = context.read<AuthProvider>().user?.id ?? '';
+    final uid = context.read<AuthProvider>().user?.id ?? '';
     setState(() { _loading = true; _error = null; });
     try {
-      final results = await Future.wait([
-        ApiService.getAdminStats(userId),
-        ApiService.getAdminUsers(userId, page: 1),
-      ]);
-      final statsData = results[0] as Map<String, dynamic>;
-      final usersData = results[1] as Map<String, dynamic>;
-      final allUsers = (usersData['users'] as List?) ?? [];
-
+      final statsMap = await ApiService.getAdminStats(uid);
+      final usersMap = await ApiService.getAdminUsers(uid, page: 1);
+      final all = usersMap['users'] as List? ?? [];
       setState(() {
-        _stats = statsData['stats'] as Map<String, dynamic>?;
-        _pendingUsers = allUsers.where((u) => u['accountStatus'] == 'PENDING').toList();
-        _loading = false;
+        _stats    = statsMap['stats'] as Map<String, dynamic>?;
+        _allUsers = all;
+        _pending  = all.where((u) => u['accountStatus'] == 'PENDING').toList();
+        _loading  = false;
       });
-    } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
-    }
+    } catch (e) { setState(() { _error = e.toString(); _loading = false; }); }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0EA5E9),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Staff Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-        bottom: TabBar(
-          controller: _tab,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.dashboard_outlined, size: 18), text: 'Overview'),
-            Tab(icon: Icon(Icons.hourglass_empty, size: 18), text: 'Pending'),
-            Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Users'),
-          ],
+      backgroundColor: _kBg,
+      body: Column(children: [
+        // Blue header
+        Container(
+          color: _kBlue,
+          child: SafeArea(
+            bottom: false,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                child: Row(children: [
+                  const Icon(Icons.support_agent_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Staff Dashboard',
+                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                  ),
+                  GestureDetector(onTap: _load,
+                      child: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 20)),
+                ]),
+              ),
+              const SizedBox(height: 10),
+              TabBar(
+                controller: _tab,
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white60,
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                dividerColor: Colors.transparent,
+                tabs: [
+                  const Tab(text: 'Overview'),
+                  Tab(child: _badge('Pending', _pending.length)),
+                  Tab(text: 'Users (${_allUsers.length})'),
+                ],
+              ),
+            ]),
+          ),
         ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red[400], size: 48),
-                    const SizedBox(height: 12),
-                    Text(_error!, style: TextStyle(color: Colors.red[400])),
-                    const SizedBox(height: 16),
-                    ElevatedButton(onPressed: _load, child: const Text('Retry')),
-                  ],
-                ))
-              : TabBarView(
-                  controller: _tab,
-                  children: [
-                    _buildOverview(),
-                    _buildPending(),
-                    _buildUsers(),
-                  ],
-                ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator(color: _kBlue))
+              : _error != null
+                  ? _errView()
+                  : TabBarView(controller: _tab, children: [
+                      _overview(), _pendingTab(), _usersTab(),
+                    ]),
+        ),
+      ]),
     );
   }
 
-  Widget _buildOverview() {
-    final s = _stats ?? {};
+  Widget _badge(String label, int count) => Row(mainAxisSize: MainAxisSize.min, children: [
+    Text(label),
+    if (count > 0) ...[
+      const SizedBox(width: 4),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(10)),
+        child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+      ),
+    ],
+  ]);
+
+  Widget _overview() {
+    final s   = _stats ?? {};
     final fmt = NumberFormat('#,##0');
-
     return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Platform Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      onRefresh: _load, color: _kBlue,
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        GridView.count(
+          crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10,
+          childAspectRatio: 1.6, shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            _statCard('Users',      fmt.format(s['totalUsers']      ?? 0)),
+            _statCard('Properties', fmt.format(s['totalProperties'] ?? 0)),
+            _statCard('Bookings',   fmt.format(s['totalBookings']   ?? 0)),
+            _statCard('Pending',    fmt.format(s['pendingApprovals'] ?? 0)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (_pending.isNotEmpty) ...[
+          _infoBanner('${_pending.length} application(s) waiting for review', () => _tab.animateTo(1)),
           const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.4,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              _statCard('Total Users', fmt.format(s['totalUsers'] ?? 0), Icons.people, const Color(0xFF2563EB)),
-              _statCard('Properties', fmt.format(s['totalProperties'] ?? 0), Icons.home_work, const Color(0xFF059669)),
-              _statCard('Bookings', fmt.format(s['totalBookings'] ?? 0), Icons.calendar_month, const Color(0xFFD97706)),
-              _statCard('Pending', fmt.format(s['pendingApprovals'] ?? 0), Icons.hourglass_empty, const Color(0xFFF59E0B)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Quick Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                _actionTile(Icons.approval, 'Review Applications', 'Check pending HOST/BROKER', () => _tab.animateTo(1)),
-                const Divider(height: 1),
-                _actionTile(Icons.manage_accounts, 'Manage Users', 'View all platform users', () => _tab.animateTo(2)),
-              ],
-            ),
-          ),
         ],
-      ),
+        const _Sec('QUICK ACTIONS'),
+        const SizedBox(height: 8),
+        _actionRow(Icons.approval_rounded,      'Review Applications', () => _tab.animateTo(1)),
+        const SizedBox(height: 6),
+        _actionRow(Icons.manage_accounts_rounded, 'Manage Users',      () => _tab.animateTo(2)),
+      ]),
     );
   }
 
-  Widget _buildPending() {
-    if (_pendingUsers.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 56),
-            SizedBox(height: 12),
-            Text('No pending applications', style: TextStyle(fontSize: 16, color: Color(0xFF64748B))),
-          ],
-        ),
-      );
+  Widget _pendingTab() {
+    if (_pending.isEmpty) {
+      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.check_circle_outline, color: Colors.green, size: 52),
+        SizedBox(height: 12),
+        Text('No pending applications', style: TextStyle(color: _kGrey, fontSize: 15)),
+      ]));
     }
-
     return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _pendingUsers.length,
+      onRefresh: _load, color: _kBlue,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(14),
+        itemCount: _pending.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (_, i) {
-          final u = _pendingUsers[i];
+          final u    = _pending[i];
+          final role = u['role'] as String? ?? '';
           return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFDE68A)),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+              borderRadius: BorderRadius.circular(10),
+              border: Border(left: BorderSide(color: _kBlue, width: 4),
+                  top: const BorderSide(color: _kBorder),
+                  right: const BorderSide(color: _kBorder),
+                  bottom: const BorderSide(color: _kBorder)),
             ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFFF59E0B).withOpacity(0.15),
-                  child: Text((u['name'] ?? u['email'] ?? '?')[0].toUpperCase(),
-                      style: const TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.bold)),
+            child: Row(children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: _kBlueL,
+                child: Text(
+                  (u['name'] ?? u['email'] ?? '?')[0].toUpperCase(),
+                  style: const TextStyle(color: _kBlue, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(u['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(u['email'] ?? '', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                      Text('Role: ${u['role']}', style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12)),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text('PENDING', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(u['name'] ?? 'Unknown',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _kBlack)),
+                Text(u['email'] ?? '',
+                    style: const TextStyle(color: _kGrey, fontSize: 12),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                _pillBlue(role),
+              ])),
+              _pillOrange('PENDING'),
+            ]),
           );
         },
       ),
     );
   }
 
-  Widget _buildUsers() {
-    final userId = context.read<AuthProvider>().user?.id ?? '';
-    return FutureBuilder<Map<String, dynamic>>(
-      future: ApiService.getAdminUsers(userId),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final users = snap.data?['users'] as List? ?? [];
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: users.length,
-          itemBuilder: (_, i) {
-            final u = users[i];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
-              ),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF0EA5E9).withOpacity(0.1),
-                  child: Text((u['name'] ?? u['email'] ?? '?')[0].toUpperCase(),
-                      style: const TextStyle(color: Color(0xFF0EA5E9), fontWeight: FontWeight.bold)),
-                ),
-                title: Text(u['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                subtitle: Text(u['email'] ?? '', style: const TextStyle(fontSize: 12)),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0EA5E9).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(u['role'] ?? '', style: const TextStyle(color: Color(0xFF0EA5E9), fontSize: 11, fontWeight: FontWeight.w600)),
-                ),
-              ),
-            );
-          },
+  Widget _usersTab() {
+    if (_allUsers.isEmpty) {
+      return const Center(child: Text('No users found', style: TextStyle(color: _kGrey)));
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: _allUsers.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      itemBuilder: (_, i) {
+        final u    = _allUsers[i];
+        final role = u['role'] as String? ?? '';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _kBorder),
+          ),
+          child: Row(children: [
+            CircleAvatar(
+              radius: 17, backgroundColor: _kBlueL,
+              child: Text((u['name'] ?? u['email'] ?? '?')[0].toUpperCase(),
+                  style: const TextStyle(color: _kBlue, fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(u['name'] ?? 'Unknown',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _kBlack),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(u['email'] ?? '',
+                  style: const TextStyle(fontSize: 11, color: _kGrey),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ])),
+            _pillBlue(role),
+          ]),
         );
       },
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const Spacer(),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-        ],
-      ),
-    );
-  }
+  Widget _errView() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    const Icon(Icons.error_outline, color: Colors.red, size: 44),
+    const SizedBox(height: 10),
+    Text(_error!, style: const TextStyle(color: _kGrey, fontSize: 13)),
+    const SizedBox(height: 14),
+    ElevatedButton(onPressed: _load,
+        style: ElevatedButton.styleFrom(backgroundColor: _kBlue, foregroundColor: Colors.white),
+        child: const Text('Retry')),
+  ]));
 
-  Widget _actionTile(IconData icon, String title, String sub, VoidCallback onTap) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: const Color(0xFF0EA5E9)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-      subtitle: Text(sub, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF94A3B8)),
-      onTap: onTap,
-    );
-  }
+  Widget _statCard(String label, String value) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _kBorder)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontSize: 11, color: _kGrey, fontWeight: FontWeight.w500)),
+      const Spacer(),
+      Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: _kBlue)),
+    ]),
+  );
+
+  Widget _infoBanner(String msg, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _kBlueL, borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _kBlue.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.info_outline_rounded, color: _kBlue, size: 15),
+        const SizedBox(width: 8),
+        Expanded(child: Text(msg, style: const TextStyle(color: _kBlue, fontWeight: FontWeight.w600, fontSize: 12))),
+        const Icon(Icons.arrow_forward_ios_rounded, color: _kBlue, size: 11),
+      ]),
+    ),
+  );
+
+  Widget _actionRow(IconData icon, String label, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _kBorder)),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: _kBlueL, borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: _kBlue, size: 17),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _kBlack))),
+        const Icon(Icons.chevron_right_rounded, color: _kGrey, size: 18),
+      ]),
+    ),
+  );
+
+  Widget _pillBlue(String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(color: _kBlueL, borderRadius: BorderRadius.circular(5)),
+    child: Text(label, style: const TextStyle(color: _kBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+  );
+
+  Widget _pillOrange(String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
+    child: Text(label, style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+  );
+}
+
+class _Sec extends StatelessWidget {
+  final String text;
+  const _Sec(this.text);
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _kGrey, letterSpacing: 0.5));
 }
